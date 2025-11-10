@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pong Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      user-select: none;
+    }
+    canvas {
+      border: 4px solid #00f; /* borda azul */
+      box-shadow: 0 0 20px #00f, 0 0 40px #00f, 0 0 60px #00f; /* brilho azul */
+      background: black;
+      display: block;
+      margin: 20px auto;
+    }
+    #menu, #gameOverScreen {
+      text-align: center;
+      margin-top: 50px;
+    }
+    .hidden { display: none; }
+    input {
+      padding: 10px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      width: 200px;
+      text-align: center;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      background: #28a745;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      margin: 10px;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #218838;
+    }
+    #countdown {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 100px;
+      opacity: 0;
+      animation: fade 1s linear;
+    }
+    @keyframes fade {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Pong Game</h1>
+
+  <!-- MENU INICIAL -->
+  <div id="menu">
+    <h2>Escolha o modo de jogo</h2>
+    <button id="onePlayerBtn">1 Jogador (vs IA)</button>
+    <button id="twoPlayerBtn">2 Jogadores</button>
+
+    <div id="nameInputs" class="hidden">
+      <div id="player1Input">
+        <input type="text" id="player1Name" placeholder="Nome do Jogador 1">
+      </div>
+      <div id="player2Input" class="hidden">
+        <input type="text" id="player2Name" placeholder="Nome do Jogador 2">
+      </div>
+      <button id="startGameBtn">Jogar</button>
+    </div>
+  </div>
+
+  <!-- JOGO -->
+  <canvas id="gameCanvas" width="800" height="500" class="hidden"></canvas>
+  <div id="countdown"></div>
+
+  <!-- TELA DE FIM -->
+  <div id="gameOverScreen" class="hidden">
+    <h2 id="winnerText"></h2>
+    <button id="restartBtn">Reiniciar</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Initialize audio with error handling
+    const mainMusic = new Audio("pongaudio2.mp3");
+    mainMusic.loop = true;
+    mainMusic.volume = 0.6;
+    mainMusic.preload = "auto";
+    
+    // Handle main music loading errors
+    mainMusic.addEventListener('error', function(e) {
+      console.error("Main music failed to load:", e);
+      console.error("Make sure pongaudio2.mp3 exists in the same directory as the HTML file");
+    });
+    
+    mainMusic.addEventListener('canplaythrough', function() {
+      console.log("Main music loaded and ready");
+    });
+
+    // Try to load win music, but handle if file doesn't exist
+    let winMusic = null;
+    try {
+      winMusic = new Audio("pong win.mp3");
+      winMusic.volume = 0.8;
+      winMusic.preload = "auto";
+      winMusic.addEventListener('error', function(e) {
+        console.warn("Win music file not found, continuing without it");
+        winMusic = null;
+      });
+    } catch (e) {
+      console.warn("Could not load win music:", e);
+    }
+
+    // Helper function to play audio with error handling
+    function playAudio(audio, fallback = null) {
+      if (!audio) return;
+      
+      // Ensure audio is loaded
+      if (audio.readyState < 2) {
+        audio.load();
+      }
+      
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            // Audio started playing successfully
+            console.log("Audio playing successfully");
+          })
+          .catch(error => {
+            console.warn("Audio playback failed:", error);
+            // Try fallback if provided
+            if (fallback) {
+              playAudio(fallback);
+            }
+          });
+      }
+    }
+    
+    // Variable to track if audio context is unlocked
+    let audioUnlocked = false;
+    
+    // Function to unlock audio context (must be called on user interaction)
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      
+      // Unlock audio by playing and immediately pausing
+      if (mainMusic) {
+        // Ensure audio is loaded first
+        if (mainMusic.readyState === 0) {
+          mainMusic.load();
+        }
+        
+        // Try to play and pause to unlock audio context
+        const playPromise = mainMusic.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              mainMusic.pause();
+              mainMusic.currentTime = 0;
+              audioUnlocked = true;
+              console.log("Audio context unlocked");
+            })
+            .catch(error => {
+              console.warn("Could not unlock audio context:", error);
+              // Still mark as unlocked to prevent repeated attempts
+              audioUnlocked = true;
+            });
+        } else {
+          audioUnlocked = true;
+        }
+      } else {
+        audioUnlocked = true;
+      }
+    }
+
+    const paddleWidth = 10, paddleHeight = 100;
+    const ballSize = 10;
+    const winningScore = 10;
+    let singlePlayer = false;
+    let gameOver = false;
+
+    let leftPaddle, rightPaddle, ball;
+    let leftScore, rightScore;
+    let keys = {};
+
+    let player1Name = "Jogador 1";
+    let player2Name = "Jogador 2";
+
+    let particles = [];
+
+    document.addEventListener("keydown", e => keys[e.key] = true);
+    document.addEventListener("keyup", e => keys[e.key] = false);
+
+    function startGame() {
+      document.getElementById("menu").classList.add("hidden");
+      document.getElementById("gameCanvas").classList.remove("hidden");
+      countdownStart();
+    }
+
+    function countdownStart() {
+      const countdown = document.getElementById("countdown");
+      let count = 3;
+
+      function showNumber() {
+        countdown.textContent = count > 0 ? count : "GO!";
+        countdown.style.opacity = "1";
+        countdown.style.animation = "fade 1s linear";
+        setTimeout(() => {
+          countdown.style.opacity = "0";
+          count--;
+          if (count >= -1) setTimeout(showNumber, 1000);
+          else startMatch();
+        }, 1000);
+      }
+      showNumber();
+    }
+
+    function startMatch() {
+      mainMusic.currentTime = 0;
+      playAudio(mainMusic);
+      resetGame();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.getElementById("restartBtn").onclick = () => {
+      document.getElementById("gameOverScreen").classList.add("hidden");
+      document.getElementById("menu").classList.remove("hidden");
+      if (winMusic) {
+        winMusic.pause();
+        winMusic.currentTime = 0;
+      }
+    };
+
+    function resetGame() {
+      leftPaddle = { x: 20, y: canvas.height / 2 - paddleHeight / 2, speed: 5 };
+      rightPaddle = { x: canvas.width - 30, y: canvas.height / 2 - paddleHeight / 2, speed: 5 };
+      ball = { x: canvas.width / 2, y: canvas.height / 2, dx: 4, dy: 4 };
+      leftScore = 0;
+      rightScore = 0;
+      gameOver = false;
+    }
+
+    function aiMove() {
+      const centerPaddle = rightPaddle.y + paddleHeight / 2;
+      if (ball.y < centerPaddle - 30) rightPaddle.y -= rightPaddle.speed * 0.7;
+      else if (ball.y > centerPaddle + 30) rightPaddle.y += rightPaddle.speed * 0.7;
+    }
+
+    function movePaddles() {
+      if (keys["w"] && leftPaddle.y > 0) leftPaddle.y -= leftPaddle.speed;
+      if (keys["s"] && leftPaddle.y + paddleHeight < canvas.height) leftPaddle.y += leftPaddle.speed;
+      if (!singlePlayer) {
+        if (keys["ArrowUp"] && rightPaddle.y > 0) rightPaddle.y -= rightPaddle.speed;
+        if (keys["ArrowDown"] && rightPaddle.y + paddleHeight < canvas.height) rightPaddle.y += rightPaddle.speed;
+      } else aiMove();
+    }
+
+    function moveBall() {
+      ball.x += ball.dx;
+      ball.y += ball.dy;
+
+      if (ball.y <= 0 || ball.y + ballSize >= canvas.height) ball.dy *= -1;
+
+      if (
+        ball.x <= leftPaddle.x + paddleWidth &&
+        ball.y + ballSize >= leftPaddle.y &&
+        ball.y <= leftPaddle.y + paddleHeight
+      ) {
+        ball.dx *= -1;
+        ball.x = leftPaddle.x + paddleWidth;
+      }
+
+      if (
+        ball.x + ballSize >= rightPaddle.x &&
+        ball.y + ballSize >= rightPaddle.y &&
+        ball.y <= rightPaddle.y + paddleHeight
+      ) {
+        ball.dx *= -1;
+        ball.x = rightPaddle.x - ballSize;
+      }
+
+      if (ball.x < 0) {
+        rightScore++;
+        checkWin();
+        resetBall();
+      } else if (ball.x > canvas.width) {
+        leftScore++;
+        checkWin();
+        resetBall();
+      }
+    }
+
+    function checkWin() {
+      if (leftScore === winningScore || rightScore === winningScore) {
+        gameOver = true;
+        mainMusic.pause();
+        mainMusic.currentTime = 0;
+        if (winMusic) {
+          playAudio(winMusic);
+        }
+        document.getElementById("gameOverScreen").classList.remove("hidden");
+        document.getElementById("winnerText").textContent =
+          (leftScore === winningScore ? player1Name : player2Name) + " venceu!";
+        createVictoryEffect();
+      }
+    }
+
+    function resetBall() {
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      ball.dx = (Math.random() > 0.5 ? 4 : -4);
+      ball.dy = (Math.random() > 0.5 ? 4 : -4);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "white";
+      ctx.fillRect(leftPaddle.x, leftPaddle.y, paddleWidth, paddleHeight);
+      ctx.fillRect(rightPaddle.x, rightPaddle.y, paddleWidth, paddleHeight);
+      ctx.fillRect(ball.x, ball.y, ballSize, ballSize);
+      ctx.font = "25px Arial";
+      ctx.fillText(`${player1Name}: ${leftScore}`, 100, 50);
+      ctx.fillText(`${player2Name}: ${rightScore}`, canvas.width - 250, 50);
+    }
+
+    function gameLoop() {
+      if (!gameOver) {
+        movePaddles();
+        moveBall();
+      }
+      draw();
+      if (gameOver) drawVictoryEffect();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function createVictoryEffect() {
+      for (let i = 0; i < 100; i++) {
+        particles.push({
+          x: canvas.width / 2,
+          y: canvas.height / 2,
+          dx: (Math.random() - 0.5) * 8,
+          dy: (Math.random() - 0.5) * 8,
+          life: Math.random() * 30 + 30,
+          color: `hsl(${Math.random() * 360}, 100%, 50%)`
+        });
+      }
+    }
+
+    function drawVictoryEffect() {
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        p.x += p.dx;
+        p.y += p.dy;
+        p.life--;
+      });
+      particles = particles.filter(p => p.life > 0);
+    }
+
+
+    document.getElementById("startGameBtn").onclick = () => {
+      player1Name = document.getElementById("player1Name").value || "Jogador 1";
+      player2Name = document.getElementById("player2Name").value || (singlePlayer ? "IA" : "Jogador 2");
+      // Unlock audio context on user interaction
+      unlockAudio();
+      startGame();
+    };
+    
+    // Also unlock audio on any button click for better compatibility
+    document.getElementById("onePlayerBtn").onclick = () => {
+      unlockAudio();
+      singlePlayer = true;
+      document.getElementById("nameInputs").classList.remove("hidden");
+      document.getElementById("player2Input").classList.add("hidden");
+    };
+
+    document.getElementById("twoPlayerBtn").onclick = () => {
+      unlockAudio();
+      singlePlayer = false;
+      document.getElementById("nameInputs").classList.remove("hidden");
+      document.getElementById("player2Input").classList.remove("hidden");
+    };
+  </script>
+</body>
+</html>
