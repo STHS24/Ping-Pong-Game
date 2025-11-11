@@ -1,3 +1,5 @@
+// Updated physics.step: returns { scorer: 'left'|'right' } when a point occurs, otherwise null.
+// Does not change the score directly — leaves that to Game.
 export class Physics {
   constructor(config) {
     this.config = config;
@@ -24,21 +26,31 @@ export class Physics {
           ball.y - ball.radius < p.y + p.height &&
           ball.y + ball.radius > p.y) {
         // basic reflect
-        ball.vx *= -1.05; // speed up a bit
+        // ensure ball is moving away from paddle after collision
+        const incomingRight = ball.vx > 0;
+        ball.vx *= -1.05; // invert and slightly speed up
         // tweak vy based on where it hit the paddle
         const rel = (ball.y - (p.y + p.height / 2)) / (p.height / 2);
         ball.vy += rel * 2;
         // push ball out to avoid sticking
-        if (ball.vx > 0) ball.x = p.x + p.width + ball.radius;
-        else ball.x = p.x - ball.radius;
+        if (incomingRight) {
+          // ball was moving right, now moving left -> place right of paddle
+          ball.x = p.x - ball.radius;
+        } else {
+          ball.x = p.x + p.width + ball.radius;
+        }
       }
     }
 
-    // scoring (simple)
-    if (ball.x < 0) {
-      ball.reset(config.width / 2, config.height / 2, config.initialBallSpeed);
-    } else if (ball.x > config.width) {
-      ball.reset(config.width / 2, config.height / 2, config.initialBallSpeed);
+    // scoring detection (do NOT reset score here)
+    if (ball.x + ball.radius < 0) {
+      // ball fully left -> right player scores
+      return { scorer: 'right' };
+    } else if (ball.x - ball.radius > config.width) {
+      // ball fully right -> left player scores
+      return { scorer: 'left' };
     }
+
+    return null;
   }
 }
