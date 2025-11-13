@@ -11,6 +11,11 @@ export class Renderer {
     ctx.clearRect(0, 0, canvas.width / this.scale, canvas.height / this.scale);
 
     const r = n => Math.round(n); // arredonda para manter pixels inteiros
+        if (!window._loggedR) {
+          console.log("[DEBUG][renderer.js] Entering arrow function: r");
+          window._loggedR = true;
+    }
+
 
     // midline
     ctx.fillStyle = '#333';
