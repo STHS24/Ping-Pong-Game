@@ -36,21 +36,22 @@ let socket;
 let side = "spectator";
 let connected = false;
 
+/* WebSocket connection - supports both local dev and production (render.com) */
 function createSocket() {
-    const url =
-        (location.protocol === "https:" ? "wss://" : "ws://") +
-        location.host;
+    // Use wss:// for HTTPS, ws:// for HTTP
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Use current port in production, 8080 for local dev
+    const port = location.port ? location.port : '8080';
+    const url = `${protocol}//${location.hostname}:${port}`;
 
     console.log("[WS] Connecting to:", url);
     socket = new WebSocket(url);
 
-    // When connected
     socket.onopen = () => {
         connected = true;
         console.log("[WS] Connected");
     };
 
-    // When receiving data
     socket.onmessage = evt => {
         const msg = JSON.parse(evt.data);
 
@@ -75,7 +76,7 @@ function createSocket() {
     };
 }
 
-// Start connection
+// Start WS connection
 createSocket();
 
 // ----------------------------------------
@@ -99,6 +100,7 @@ function sendPaddle() {
 // ----------------------------------------
 function gameLoop() {
     game.updateLocal(side);
+    game.updatePhysics();
     game.render();
 
     sendPaddle();
@@ -106,5 +108,4 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-game.start();
 requestAnimationFrame(gameLoop);

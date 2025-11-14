@@ -1,9 +1,13 @@
 // src/server/server.js
 
-const express = require("express");
-const path = require("path");
-const http = require("http");
-const { WebSocketServer } = require("ws");
+import express from "express";
+import { createServer } from "http";
+import { WebSocketServer } from "ws";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const PORT = process.env.PORT || 8080;
 
@@ -14,7 +18,7 @@ const app = express();
 
 // FRONTEND ROOT = TWO FOLDERS UP
 // Because server.js is inside /src/server/
-const FRONTEND_DIR = path.join(__dirname, "..", "..");
+const FRONTEND_DIR = join(__dirname, "..", "..");
 
 // Serve everything (index.html, src/, styles/, etc)
 app.use(express.static(FRONTEND_DIR));
@@ -24,11 +28,11 @@ app.get("/favicon.ico", (req, res) => res.status(204).end());
 
 // SPA fallback (optional)
 app.get("*", (req, res) => {
-    res.sendFile(path.join(FRONTEND_DIR, "index.html"));
+    res.sendFile(join(FRONTEND_DIR, "index.html"));
 });
 
 // Create HTTP server so WebSocket can share same port
-const server = http.createServer(app);
+const server = createServer(app);
 
 // ----------------------------------------
 // WEBSOCKET SERVER (game state sync)
