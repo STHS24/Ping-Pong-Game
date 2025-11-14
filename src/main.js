@@ -40,9 +40,16 @@ let connected = false;
 function createSocket() {
     // Use wss:// for HTTPS, ws:// for HTTP
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Use current port in production, 8080 for local dev
-    const port = location.port ? location.port : '8080';
-    const url = `${protocol}//${location.hostname}:${port}`;
+
+    // Construct URL based on environment
+    let url;
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        // Local development: use port 8080
+        url = `${protocol}//${location.hostname}:8080`;
+    } else {
+        // Production (render.com): use same port as webpage (no explicit port for 443/80)
+        url = `${protocol}//${location.hostname}`;
+    }
 
     console.log("[WS] Connecting to:", url);
     socket = new WebSocket(url);
