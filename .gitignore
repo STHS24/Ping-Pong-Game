@@ -1,2 +1,2 @@
-src/server/node_modules/
-src/server/package-lock.json
+**/node_modules/
+**/package-lock.json

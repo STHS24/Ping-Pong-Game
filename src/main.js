@@ -4,7 +4,9 @@ import { Input } from './systems/input.js';
 
 const canvas = document.getElementById('gameCanvas');
 
-// Set up canvas scale
+// ----------------------------------------
+// Canvas setup
+// ----------------------------------------
 function setupCanvas(canvas, config) {
     const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
     const scale = dpr;
@@ -27,40 +29,80 @@ const { ctx, scale } = setupCanvas(canvas, CONFIG);
 const input = new Input(window);
 const game = new Game(canvas, ctx, scale, input);
 
-// 🎮 Multiplayer WebSocket
-const socket = new WebSocket("ws://localhost:8080");
+// ----------------------------------------
+// WebSocket connection handling
+// ----------------------------------------
+let socket;
 let side = "spectator";
+let connected = false;
 
-socket.onmessage = evt => {
-    const msg = JSON.parse(evt.data);
+function createSocket() {
+    const url =
+        (location.protocol === "https:" ? "wss://" : "ws://") +
+        location.host;
 
-    if (msg.type === "side") {
-        side = msg.side;
-        console.log("Assigned side:", side);
-    }
+    console.log("[WS] Connecting to:", url);
+    socket = new WebSocket(url);
 
-    if (msg.type === "state") {
-        game.applyMultiplayerState(msg.state);
-    }
-};
+    // When connected
+    socket.onopen = () => {
+        connected = true;
+        console.log("[WS] Connected");
+    };
 
-// 🎮 Send paddle movement
-function sendPaddle() {
-    if (side === "left" || side === "right") {
-        const paddle = side === "left" ? game.left : game.right;
+    // When receiving data
+    socket.onmessage = evt => {
+        const msg = JSON.parse(evt.data);
 
-        socket.send(JSON.stringify({
-            type: "move",
-            y: paddle.y
-        }));
-    }
+        if (msg.type === "side") {
+            side = msg.side;
+            console.log("[WS] Assigned side:", side);
+        }
+
+        if (msg.type === "state") {
+            game.applyMultiplayerState(msg.state);
+        }
+    };
+
+    socket.onclose = () => {
+        connected = false;
+        console.warn("[WS] Connection lost. Reconnecting in 1s...");
+        setTimeout(createSocket, 1000);
+    };
+
+    socket.onerror = err => {
+        console.error("[WS] Error:", err);
+    };
 }
 
+// Start connection
+createSocket();
+
+// ----------------------------------------
+// Send paddle movement to server
+// ----------------------------------------
+function sendPaddle() {
+    if (!connected) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    if (side !== "left" && side !== "right") return;
+
+    const paddle = side === "left" ? game.left : game.right;
+
+    socket.send(JSON.stringify({
+        type: "move",
+        y: paddle.y
+    }));
+}
+
+// ----------------------------------------
+// Game loop
+// ----------------------------------------
 function gameLoop() {
     game.updateLocal(side);
     game.render();
 
     sendPaddle();
+
     requestAnimationFrame(gameLoop);
 }
 

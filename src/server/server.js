@@ -1,7 +1,39 @@
-// server/server.js  (CommonJS version)
+// src/server/server.js
+
+const express = require("express");
+const path = require("path");
+const http = require("http");
 const { WebSocketServer } = require("ws");
 
-const wss = new WebSocketServer({ port: 8080 });
+const PORT = process.env.PORT || 8080;
+
+// ----------------------------------------
+// EXPRESS HTTP SERVER (serves the frontend)
+// ----------------------------------------
+const app = express();
+
+// FRONTEND ROOT = TWO FOLDERS UP
+// Because server.js is inside /src/server/
+const FRONTEND_DIR = path.join(__dirname, "..", "..");
+
+// Serve everything (index.html, src/, styles/, etc)
+app.use(express.static(FRONTEND_DIR));
+
+// Prevent favicon 404 spam
+app.get("/favicon.ico", (req, res) => res.status(204).end());
+
+// SPA fallback (optional)
+app.get("*", (req, res) => {
+    res.sendFile(path.join(FRONTEND_DIR, "index.html"));
+});
+
+// Create HTTP server so WebSocket can share same port
+const server = http.createServer(app);
+
+// ----------------------------------------
+// WEBSOCKET SERVER (game state sync)
+// ----------------------------------------
+const wss = new WebSocketServer({ server });
 
 let players = {
     left: null,
@@ -36,28 +68,32 @@ function resetRound() {
     state.right.y = 250;
 }
 
-// 60 FPS physics
+// Physics loop (60 FPS)
 setInterval(() => {
     state.ball.x += state.ball.vx;
     state.ball.y += state.ball.vy;
 
-    // top/bottom bounce
     if (state.ball.y <= 0 || state.ball.y >= 600)
         state.ball.vy *= -1;
 
-    // left paddle
-    if (state.ball.x <= 42 &&
+    // Left paddle collision
+    if (
+        state.ball.x <= 42 &&
         state.ball.y >= state.left.y &&
-        state.ball.y <= state.left.y + 100)
+        state.ball.y <= state.left.y + 100
+    ) {
         state.ball.vx *= -1;
+    }
 
-    // right paddle
-    if (state.ball.x >= 760 &&
+    // Right paddle collision
+    if (
+        state.ball.x >= 760 &&
         state.ball.y >= state.right.y &&
-        state.ball.y <= state.right.y + 100)
+        state.ball.y <= state.right.y + 100
+    ) {
         state.ball.vx *= -1;
+    }
 
-    // scoring
     if (state.ball.x < 0) {
         state.score.right++;
         resetRound();
@@ -71,20 +107,14 @@ setInterval(() => {
 }, 1000 / 60);
 
 function broadcastState() {
-    const payload = JSON.stringify({
-        type: "state",
-        state
-    });
-
+    const data = JSON.stringify({ type: "state", state });
     wss.clients.forEach(c => {
-        if (c.readyState === 1)
-            c.send(payload);
+        if (c.readyState === 1) c.send(data);
     });
 }
 
 wss.on("connection", ws => {
     const side = assignSide(ws);
-
     ws.send(JSON.stringify({ type: "side", side }));
 
     ws.on("message", raw => {
@@ -101,4 +131,7 @@ wss.on("connection", ws => {
     });
 });
 
-console.log("Multiplayer server running on ws://localhost:8080");
+// ----------------------------------------
+server.listen(PORT, () => {
+    console.log("Server running on port", PORT);
+});
