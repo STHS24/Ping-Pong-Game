@@ -68,7 +68,7 @@ function createSocket() {
         }
 
         if (msg.type === "state") {
-            game.applyMultiplayerState(msg.state);
+            game.applyMultiplayerState(msg.state, side);
         }
     };
 

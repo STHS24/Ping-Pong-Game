@@ -53,13 +53,19 @@ export class Game {
     }
 
     // Called by WebSocket client
-    applyMultiplayerState(state) {
+    applyMultiplayerState(state, mySide) {
         this.multiplayer = true;
 
-        // Server authoritative positions
-        this.left.y = state.left.y;
-        this.right.y = state.right.y;
+        // Only update opponent's paddle, not your own (client-side prediction)
+        // This prevents flickering from local input fighting with server updates
+        if (mySide !== "left") {
+            this.left.y = state.left.y;
+        }
+        if (mySide !== "right") {
+            this.right.y = state.right.y;
+        }
 
+        // Server is authoritative for ball and score
         this.ball.x = state.ball.x;
         this.ball.y = state.ball.y;
 
