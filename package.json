@@ -1,12 +1,16 @@
 {
-  "name": "ping-pong-multiplayer",
+  "name": "my-game",
   "version": "1.0.0",
   "type": "module",
-  "dependencies": {
-    "ws": "^8.18.0",
-    "express": "^4.18.2"
-  },
+  "main": "src/server/server.js",
   "scripts": {
-    "start": "node src/server/server.js"
+    "start": "node src/server/server.js",
+    "dev": "NODE_ENV=development node --enable-source-maps src/server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.8.0",
+    "helmet": "^7.2.0",
+    "ws": "^8.13.0"
   }
 }
